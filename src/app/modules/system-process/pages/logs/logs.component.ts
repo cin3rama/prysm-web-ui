@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { takeUntil, tap } from 'rxjs/operators';
-import { LogsService } from '../../services/logs.service';
+import { LogsService } from 'src/app/modules/core/services/logs.service';
 
 interface LogMetrics {
   percentInfo: string;
@@ -42,16 +42,16 @@ export class LogsComponent implements OnInit, OnDestroy {
   private subscribeLogs(): void {
     this.logsService.validatorLogs().pipe(
       takeUntil(this.destroyed$$),
-      tap((msg: MessageEvent) => {
-        this.validatorMessages.push(msg.data);
-        this.countLogMetrics(msg.data);
+      tap((msg: string) => {
+        this.validatorMessages.push(msg);
+        this.countLogMetrics(msg);
       })
     ).subscribe();
     this.logsService.beaconLogs().pipe(
       takeUntil(this.destroyed$$),
-      tap((msg: MessageEvent) => {
-        this.beaconMessages.push(msg.data);
-        this.countLogMetrics(msg.data);
+      tap((msg: string) => {
+        this.beaconMessages.push(msg);
+        this.countLogMetrics(msg);
       })
     ).subscribe();
   }
@@ -61,6 +61,7 @@ export class LogsComponent implements OnInit, OnDestroy {
     if (!val || !log) {
       return;
     }
+    log = log.toUpperCase();
     if (log.indexOf('INFO') !== -1) {
       this.totalInfo++;
       this.totalLogs++;

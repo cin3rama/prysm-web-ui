@@ -1,18 +1,17 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 
-import { zip, Observable, of, throwError, EMPTY } from 'rxjs';
-import { switchMap, mergeMap, concatAll, toArray, retry, catchError, map } from 'rxjs/operators';
+import { zip, Observable, of } from 'rxjs';
+import { switchMap, mergeMap, concatAll, toArray, map, shareReplay } from 'rxjs/operators';
 
 import range from 'src/app/modules/core/utils/range';
-import { BeaconNodeService } from './beacon-node.service';
 import { WalletService } from './wallet.service';
 
 import {
-  ValidatorBalances, ValidatorPerformanceResponse, Validators, ValidatorQueue,
+  ValidatorBalances, ValidatorPerformanceResponse, Validators,
 } from 'src/app/proto/eth/v1alpha1/beacon_chain';
-import { hexToBase64 } from '../utils/hex-util';
-import { ListAccountsResponse } from 'src/app/proto/validator/accounts/v2/web_api';
+import { ListAccountsResponse, LogsEndpointResponse } from 'src/app/proto/validator/accounts/v2/web_api';
+import { EnvironmenterService } from './environmenter.service';
 
 export const MAX_EPOCH_LOOKBACK = 10;
 
@@ -22,30 +21,23 @@ export const MAX_EPOCH_LOOKBACK = 10;
 export class ValidatorService {
   constructor(
     private http: HttpClient,
-    private beaconNodeService: BeaconNodeService,
     private walletService: WalletService,
+    private environmenter: EnvironmenterService,
   ) { }
 
-  // Observables.
-  activationQueue$: Observable<ValidatorQueue> = this.beaconNodeService.nodeEndpoint$.pipe(
-    switchMap(endpoint =>
-      this.http.get<ValidatorQueue>(`${endpoint}/validators/queue`)
-    ),
+  private apiUrl = this.environmenter.env.validatorEndpoint;
+  logsEndpoints$: Observable<LogsEndpointResponse> = this.http.get<LogsEndpointResponse>(`${this.apiUrl}/health/logs/endpoints`).pipe(
+    shareReplay(),
   );
 
-  performance$: Observable<ValidatorPerformanceResponse & ValidatorBalances> = zip(
-    this.beaconNodeService.nodeEndpoint$,
-    this.walletService.validatingPublicKeys$
-  ).pipe(
-    switchMap((result: [string, string[]]) => {
-      const publicKeys = result[1];
-      const endpoint = result[0];
+  performance$: Observable<ValidatorPerformanceResponse & ValidatorBalances> = this.walletService.validatingPublicKeys$.pipe(
+    switchMap((publicKeys: string[]) => {
       let params = `?publicKeys=`;
       publicKeys.forEach((key, _) => {
         params += `${this.encodePublicKey(key)}&publicKeys=`;
       });
       const balances = this.balances(publicKeys, 0, publicKeys.length);
-      const httpReq = this.http.get<ValidatorPerformanceResponse>(`${endpoint}/validators/performance${params}`);
+      const httpReq = this.http.get<ValidatorPerformanceResponse>(`${this.apiUrl}/beacon/performance${params}`);
       return zip(httpReq, balances).pipe(
         map(([perf, bals]) => {
           return {
@@ -77,14 +69,10 @@ export class ValidatorService {
     return of(range(startEpoch, currentEpoch)).pipe(
       concatAll(),
       mergeMap((epoch: number) => {
-        return zip(
-          this.beaconNodeService.nodeEndpoint$,
-          this.walletService.accounts(0, numAccounts),
-        ).pipe(
-          switchMap((result: [string, ListAccountsResponse]) => {
-            const endpoint = result[0];
-            const publicKeys = result[1].accounts.map(acc => acc.validatingPublicKey);
-            return this.balancesByEpoch(endpoint, publicKeys, epoch, 0, numAccounts);
+        return this.walletService.accounts(0, numAccounts).pipe(
+          switchMap((result: ListAccountsResponse) => {
+            const publicKeys = result.accounts.map(acc => acc.validatingPublicKey);
+            return this.balancesByEpoch(publicKeys, epoch, 0, numAccounts);
           }),
         );
       }),
@@ -93,7 +81,6 @@ export class ValidatorService {
   }
 
   balancesByEpoch(
-    apiUrl: string,
     publicKeys: string[],
     epoch: number,
     pageIndex: number,
@@ -104,7 +91,7 @@ export class ValidatorService {
       params += `${this.encodePublicKey(key)}&publicKeys=`;
     });
     params += `&pageSize=${pageSize}&pageToken=${pageIndex}`;
-    return this.http.get<ValidatorBalances>(`${apiUrl}/validators/balances${params}`);
+    return this.http.get<ValidatorBalances>(`${this.apiUrl}/beacon/balances${params}`);
   }
 
   validatorList(
@@ -112,12 +99,8 @@ export class ValidatorService {
     pageIndex: number,
     pageSize: number,
   ): Observable<Validators> {
-    return this.beaconNodeService.nodeEndpoint$.pipe(
-      switchMap((endpoint: string) => {
-        const params = this.formatURIParameters(publicKeys, pageIndex, pageSize);
-        return this.http.get<Validators>(`${endpoint}/validators${params}`);
-      }),
-    );
+    const params = this.formatURIParameters(publicKeys, pageIndex, pageSize);
+    return this.http.get<Validators>(`${this.apiUrl}/beacon/validators${params}`);
   }
 
   balances(
@@ -125,12 +108,8 @@ export class ValidatorService {
     pageIndex: number,
     pageSize: number,
   ): Observable<ValidatorBalances> {
-    return this.beaconNodeService.nodeEndpoint$.pipe(
-      switchMap((endpoint: string) => {
-        const params = this.formatURIParameters(publicKeys, pageIndex, pageSize);
-        return this.http.get<ValidatorBalances>(`${endpoint}/validators/balances${params}`);
-      }),
-    );
+    const params = this.formatURIParameters(publicKeys, pageIndex, pageSize);
+    return this.http.get<ValidatorBalances>(`${this.apiUrl}/beacon/balances${params}`);
   }
 
   private formatURIParameters(

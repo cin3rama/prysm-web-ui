@@ -1,7 +1,9 @@
-/* eslint-disable */
+import { ChainHead } from 'src/app/proto/eth/v1alpha1/beacon_chain';
 
-export interface HasWalletResponse {
-  walletExists: boolean;
+/* eslint-disable */
+export interface HasUsedWebResponse {
+  hasSignedUp: boolean;
+  hasWallet: boolean;
 }
 
 export interface CreateWalletRequest {
@@ -42,7 +44,6 @@ export interface CreateWalletRequest {
 
 export interface CreateWalletResponse {
   wallet: WalletResponse;
-  accountsCreated: DepositDataResponse;
 }
 
 export interface EditWalletConfigRequest {
@@ -59,7 +60,11 @@ export interface GenerateMnemonicResponse {
 export interface WalletResponse {
   walletPath: string;
   keymanagerKind: string;
-  keymanagerConfig: { [key: string]: string };
+}
+
+export interface LogsEndpointResponse {
+  validatorLogsEndpoint: string;
+  beaconLogsEndpoint: string;
 }
 
 export interface ListAccountsRequest {
@@ -130,7 +135,7 @@ export interface AccountRequest {
 
 export interface AuthRequest {
   password: string;
-  walletDir: string;
+  passwordConfirmation: string;
 }
 
 export interface AuthResponse {
@@ -138,7 +143,7 @@ export interface AuthResponse {
   tokenExpiration: number;
 }
 
-export interface NodeConnectionResponse {
+export interface BeaconStatusResponse {
   /**
    *  The host address of the beacon node the validator
    *  client is connected to.
@@ -160,11 +165,15 @@ export interface NodeConnectionResponse {
    *  Address of the validator deposit contract in the eth1 chain.
    */
   depositContractAddress: string;
+  /**
+   *  ChainHead of the beacon node.
+   */
+  chainHead: ChainHead;
 }
 
 export interface ChangePasswordRequest {
   /**
-   *  Current wallet password.
+   *  Current UI password.
    */
   currentPassword: string;
   /**
@@ -200,36 +209,4 @@ export interface CreateAccountsRequest {
    *  Number of accounts to create.
    */
   numAccounts: number;
-}
-
-export interface DepositDataResponse {
-  depositDataList: DepositDataResponse_DepositData_Wrapper[];
-}
-
-export interface DepositDataResponse_DepositData_Wrapper {
-  data: DepositDataResponse_DepositData;
-}
-
-export interface DepositDataResponse_DepositData {
-  pubkey: string;
-  withdrawal_credentials: string;
-  amount: number;
-  signature: string;
-  deposit_message_root: string;
-  deposit_data_root: string;
-  fork_version: string;
-}
-
-export interface DeleteAccountsRequest {
-  /**
-   *  Public keys to delete.
-   */
-  publicKeys: string[];
-}
-
-export interface DeleteAccountsResponse {
-  /**
-   *  Public keys that were deleted.
-   */
-  deletedKeys: string[];
 }
